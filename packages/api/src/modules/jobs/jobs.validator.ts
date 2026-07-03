@@ -25,3 +25,15 @@ export const listJobsQuerySchema = z.object({
     limit: z.string().regex(/^\d+$/).optional(),
   })
 });
+
+export const startJobSchema = z.object({});
+
+export const completeJobSchema = z.object({
+  result: z.any().optional(),
+  durationMs: z.number().int().min(0)
+});
+
+export const failJobSchema = z.object({
+  error: z.string().min(1),
+  durationMs: z.number().int().min(0)
+});

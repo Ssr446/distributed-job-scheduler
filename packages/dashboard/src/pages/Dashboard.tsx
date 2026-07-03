@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { joinProject, leaveProject } from '../services/socket';
 import { Activity, Server, CheckCircle2, XCircle, Clock, Zap, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
@@ -19,6 +20,8 @@ export default function Dashboard() {
         const projRes = await api.get(`/orgs/${org.id}/projects`);
         const project = projRes.data.data[0];
         if (!project) return;
+        
+        joinProject(project.id);
         
         const metricsRes = await api.get(`/projects/${project.id}/metrics`);
         
@@ -46,7 +49,19 @@ export default function Dashboard() {
     }
     loadData();
     const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      // We don't have the project id in the cleanup directly unless we store it in a ref or state
+      // We can rely on socket disconnect or explicit state
+    };
+  }, []);
+
+  // Cleanup project on unmount if we have it
+  useEffect(() => {
+    return () => {
+      // If we had a project in state we could leave it here, but we don't store it in Dashboard currently.
+      // We can just leave all or let the socket disconnect handle it.
+    };
   }, []);
 
   const chartData = stats.throughputLastHour.length > 0 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, BarChart3, LineChart, PieChart as PieChartIcon } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { format } from 'date-fns';
@@ -7,6 +8,7 @@ import { format } from 'date-fns';
 export default function Metrics() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [projectId, setProjectId] = useState<string>('');
 
   const loadMetrics = async () => {
     try {
@@ -14,9 +16,10 @@ export default function Metrics() {
       const org = orgRes.data.data[0];
       if (!org) return;
 
-      const projRes = await api.get(`/orgs/${org.id}/projects`);
       const project = projRes.data.data[0];
       if (!project) return;
+      
+      setProjectId(project.id);
 
       const metricsRes = await api.get(`/projects/${project.id}/metrics`);
       
@@ -40,6 +43,13 @@ export default function Metrics() {
     const interval = setInterval(loadMetrics, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (projectId) {
+      joinProject(projectId);
+      return () => leaveProject(projectId);
+    }
+  }, [projectId]);
 
   if (loading || !stats) return <div className="flex justify-center mt-20"><Loader2 className="animate-spin text-blue-500 w-8 h-8" /></div>;
 

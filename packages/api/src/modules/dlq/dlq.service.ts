@@ -21,7 +21,19 @@ export const getDlq = async (id: string) => {
   if (!entry) throw new AppError(404, 'NOT_FOUND', 'DLQ entry not found');
   
   if (!entry.failureSummary) {
-    const summary = 'AI Summary: Likely network timeout or missing resource based on logs.';
+    let summary = 'Unknown Error: Review logs for details.';
+    const errorText = (entry.lastError || '').toLowerCase();
+    
+    if (errorText.includes('timeout') || errorText.includes('econnrefused')) {
+      summary = 'Network/Timeout Error: The external service was unreachable or timed out.';
+    } else if (errorText.includes('validation') || errorText.includes('invalid') || errorText.includes('bad request')) {
+      summary = 'Validation Error: Job payload contains invalid data.';
+    } else if (errorText.includes('declined') || errorText.includes('insufficient funds')) {
+      summary = 'Business Logic Error: The transaction was declined or failed business rules.';
+    } else if (errorText.includes('null') || errorText.includes('undefined')) {
+      summary = 'Null Reference Error: Code attempted to access a missing property.';
+    }
+    
     await prisma.deadLetterQueue.update({ where: { id }, data: { failureSummary: summary } });
     entry.failureSummary = summary;
   }

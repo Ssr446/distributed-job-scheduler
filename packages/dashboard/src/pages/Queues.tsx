@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, Plus, Play, Pause, Activity, X, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -162,6 +163,13 @@ export default function Queues() {
     const interval = setInterval(loadQueues, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (projectId) {
+      joinProject(projectId);
+      return () => leaveProject(projectId);
+    }
+  }, [projectId]);
 
   const triggerJob = async (e: React.MouseEvent, queueId: string) => {
     e.stopPropagation();

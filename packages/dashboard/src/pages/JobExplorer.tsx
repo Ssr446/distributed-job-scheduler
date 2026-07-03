@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, Search, Filter, RefreshCw, X, Play, RotateCcw, FileText } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 
@@ -13,6 +14,8 @@ export default function JobExplorer() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [searchType, setSearchType] = useState<string>('');
 
+  const [projectId, setProjectId] = useState<string>('');
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -23,6 +26,8 @@ export default function JobExplorer() {
       const projRes = await api.get(`/orgs/${org.id}/projects`);
       const project = projRes.data.data[0];
       if (!project) return;
+      
+      setProjectId(project.id);
 
       // Load queues for filter dropdown
       const queuesRes = await api.get(`/projects/${project.id}/queues`);
@@ -52,6 +57,13 @@ export default function JobExplorer() {
   useEffect(() => {
     loadData();
   }, [selectedQueue, selectedStatus]);
+
+  useEffect(() => {
+    if (projectId) {
+      joinProject(projectId);
+      return () => leaveProject(projectId);
+    }
+  }, [projectId]);
 
   const handleRetry = async (jobId: string) => {
     try {

@@ -1,43 +1,102 @@
-# Codity
-A highly scalable, distributed job scheduling system designed for real-time orchestration and execution of background jobs, delayed tasks, and cron schedules.
+# Codity - Distributed Job Scheduler
+
+A production-grade distributed job scheduling platform with guaranteed exactly-once delivery, idempotent worker execution, real-time WebSocket monitoring, and robust failure cascades.
+
+## System Overview
+Codity splits into three primary components within a monorepo:
+- **API (`packages/api`)**: The core orchestrator. Exposes REST endpoints, maintains the WebSocket state for the dashboard, manages authentication, and strictly controls queue concurrency using PostgreSQL advisory locks.
+- **Worker (`packages/worker`)**: The standalone execution daemon. It polls the API via HTTP, claims jobs, executes them, and reports back success/failure.
+- **Dashboard (`packages/dashboard`)**: The web UI for managing queues, tracking throughput metrics, and viewing real-time job execution logs.
 
 ## Architecture
-Codity is built with a Node.js API backend, a PostgreSQL relational database for state storage, and a React + Vite dashboard for real-time monitoring and management.
 
 ```mermaid
 graph TD
-    UI[React Dashboard] <--> |REST API| API[Codity API Server]
-    UI <--> |WebSocket| API
+    Dashboard["🖥️ Dashboard (React)"] <-->|REST + WebSocket| API["⚙️ API Server (Express)"]
+    API <-->|Prisma ORM| Postgres[("🐘 PostgreSQL")]
     
-    API <--> |Prisma ORM| DB[(PostgreSQL)]
+    Worker1["👷 Worker Node 1"] <-->|REST (API Key)| API
+    Worker2["👷 Worker Node 2"] <-->|REST (API Key)| API
     
-    Worker1[Worker Node A] <--> |REST| API
-    Worker2[Worker Node B] <--> |REST| API
+    subgraph "Job State Flow"
+        Claim["1. Claim Job<br/>(Advisory Lock)"] --> Start["2. Start Job"]
+        Start --> Complete["3a. Complete"]
+        Start --> Fail["3b. Fail (Retry or DLQ)"]
+    end
     
-    style UI fill:#3b82f6,stroke:#1d4ed8,color:#fff
-    style API fill:#10b981,stroke:#047857,color:#fff
-    style DB fill:#eab308,stroke:#a16207,color:#fff
-    style Worker1 fill:#6366f1,stroke:#4338ca,color:#fff
-    style Worker2 fill:#6366f1,stroke:#4338ca,color:#fff
+    Worker1 -.->|Executes| Claim
 ```
 
-## Features
-- **Job Orchestration**: Execute immediate, delayed, and scheduled/recurring (cron) jobs.
-- **Workflow Dependency Resolution**: Run complex DAGs of jobs where jobs wait in `WAITING` status until dependencies complete.
-- **Transactional Consistency**: Atomic job claiming and batch creation using PostgreSQL `SELECT ... FOR UPDATE SKIP LOCKED` and Prisma transactions.
-- **Distributed Locking**: Guaranteed safety for concurrent workers via Postgres advisory locks.
-- **Real-time Monitoring**: WebSocket server feeds the React dashboard live updates of job events and queue throughput.
-- **Industry-Grade Security**: JWT authentication with refresh token rotation, strict CORS, rate limiting, and robust payload validation.
+### Entity-Relationship Diagram
+```mermaid
+erDiagram
+    User ||--o{ OrgMembership : "has"
+    User ||--o{ Project : "creates"
+    Organization ||--o{ OrgMembership : "has"
+    Organization ||--o{ Project : "owns"
+    
+    Project ||--o{ Queue : "contains"
+    Project ||--o{ RetryPolicy : "defines"
+    
+    Queue }o--|| RetryPolicy : "uses"
+    Queue ||--o{ Job : "holds"
+    Queue ||--o{ DeadLetterQueue : "stores failures"
+    
+    Job ||--o{ JobExecution : "spawns"
+    Job ||--o{ JobLog : "generates"
+    Job ||--o{ DeadLetterQueue : "moves to"
+    Job ||--o| ScheduledJob : "configured as"
+    Job ||--o{ JobDependency : "depends on"
+    Job ||--o{ JobDependency : "dependency of"
+    
+    Worker ||--o{ Job : "claims"
+    Worker ||--o{ JobExecution : "executes"
+    Worker ||--o{ WorkerHeartbeat : "emits"
+    Worker ||--o{ ApiKey : "authenticates with"
+    
+    RevokedToken
+```
 
-## Quick Start
-1. Clone the repository.
-2. Ensure you have Node.js 18+ and PostgreSQL installed.
-3. Copy `.env.example` to `packages/api/.env` and update the database URL.
-4. Run `npm install` in both `packages/api` and `packages/dashboard`.
-5. Run `npx prisma migrate dev` and `npm run seed` in `packages/api`.
-6. Start both servers:
-   - API: `npm run dev` in `packages/api`
-   - UI: `npm run dev` in `packages/dashboard`
+## Setup & Prerequisites
+1. **Node.js** (v20+) and **npm**
+2. **PostgreSQL** (v15+) or Docker
 
-## Docker Deployment
-Alternatively, use `docker-compose up -d` to spin up the API, Dashboard, and PostgreSQL database seamlessly.
+### Local Environment Setup
+1. Copy the example `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Install dependencies across all packages:
+   ```bash
+   npm install
+   ```
+
+### Database Initialization
+1. Spin up a local PostgreSQL instance (or use the one in `docker-compose`).
+2. Run Prisma migrations:
+   ```bash
+   npm run db:migrate
+   ```
+3. Seed the database with the initial setup:
+   ```bash
+   npm run db:seed
+   ```
+   > **IMPORTANT**: The seed script will print a generated `WORKER_API_KEY`. Copy this value and add it to your `.env` file under `WORKER_API_KEY=...` so the worker can authenticate.
+
+## Running the Application
+
+### Option A: Local Development
+Run all three services (API, Worker, Dashboard) concurrently in watch mode:
+```bash
+npm run dev
+```
+- Dashboard: `http://localhost:5173`
+- API: `http://localhost:3000/api/v1`
+
+### Option B: Docker Compose (Production Build)
+Build and run the entire stack (Postgres + API + Worker + Nginx Dashboard) using Docker:
+```bash
+# Ensure your .env file has WORKER_API_KEY set from the seed output!
+docker-compose up --build
+```
+- Dashboard will be available at `http://localhost:8080`.

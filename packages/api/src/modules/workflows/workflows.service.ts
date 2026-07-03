@@ -47,10 +47,14 @@ export const checkAndResolveDependencies = async (completedJobId: string) => {
 };
 
 // Register listener automatically when imported
-eventBus.on('job.completed', async (job: any) => {
+const handleDepCheck = async (job: any) => {
   try {
     await checkAndResolveDependencies(job.id);
   } catch (error) {
     logger.error({ err: error, jobId: job.id }, 'Failed to resolve dependencies');
   }
-});
+};
+
+eventBus.on('job.completed', handleDepCheck);
+eventBus.on('job.dead', handleDepCheck);
+eventBus.on('job.cancelled', handleDepCheck);

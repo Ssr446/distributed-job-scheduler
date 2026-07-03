@@ -6,32 +6,21 @@ import { AppError } from '../../utils/AppError.js';
 import { logger } from '../../config/logger.js';
 import type { RegisterInput, LoginInput } from './auth.validator.js';
 import type { JwtPayload } from '../../middleware/auth.js';
+import crypto from 'crypto';
 
 const SALT_ROUNDS = 12;
 
-// In-memory token blacklist for simplicity (in a real app, use Redis)
-const tokenBlacklist = new Set<string>();
-
-export function isTokenBlacklisted(token: string): boolean {
-  return tokenBlacklist.has(token);
-}
-
-function generateAccessToken(payload: JwtPayload): string {
-  return jwt.sign(payload, env.JWT_SECRET, {
-    expiresIn: env.JWT_EXPIRES_IN as any,
-  });
-}
-
-function generateRefreshToken(payload: JwtPayload): string {
-  return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRES_IN as any,
-  });
-}
-
-function generateTokens(payload: JwtPayload) {
+function generateTokens(payload: Omit<JwtPayload, 'jti'>) {
+  const accessJti = crypto.randomUUID();
+  const refreshJti = crypto.randomUUID();
+  
   return {
-    accessToken: generateAccessToken(payload),
-    refreshToken: generateRefreshToken(payload),
+    accessToken: jwt.sign({ ...payload, jti: accessJti }, env.JWT_SECRET, {
+      expiresIn: env.JWT_EXPIRES_IN as any,
+    }),
+    refreshToken: jwt.sign({ ...payload, jti: refreshJti }, env.JWT_REFRESH_SECRET, {
+      expiresIn: env.JWT_REFRESH_EXPIRES_IN as any,
+    }),
     expiresIn: env.JWT_EXPIRES_IN as any,
   };
 }
@@ -39,7 +28,6 @@ function generateTokens(payload: JwtPayload) {
 export async function register(input: RegisterInput) {
   const { email, password, name } = input;
 
-  // Check if user already exists
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw AppError.conflict('A user with this email already exists');
@@ -47,7 +35,6 @@ export async function register(input: RegisterInput) {
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-  // Create user, default org, and membership in a transaction
   const result = await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: {
@@ -58,7 +45,6 @@ export async function register(input: RegisterInput) {
       },
     });
 
-    // Create a default personal organization
     const slug = email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g, '-') + '-org';
     const org = await tx.organization.create({
       data: {
@@ -67,7 +53,6 @@ export async function register(input: RegisterInput) {
       },
     });
 
-    // User becomes owner of their default org
     await tx.orgMembership.create({
       data: {
         userId: user.id,
@@ -79,7 +64,7 @@ export async function register(input: RegisterInput) {
     return { user, org };
   });
 
-  const tokenPayload: JwtPayload = {
+  const tokenPayload: Omit<JwtPayload, 'jti'> = {
     userId: result.user.id,
     email: result.user.email,
     role: result.user.role,
@@ -110,7 +95,6 @@ export async function login(input: LoginInput) {
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    // Prevent timing attacks by hashing anyway
     await bcrypt.compare(password, 'dummy');
     throw AppError.unauthorized('Invalid email or password');
   }
@@ -120,7 +104,7 @@ export async function login(input: LoginInput) {
     throw AppError.unauthorized('Invalid email or password');
   }
 
-  const tokenPayload: JwtPayload = {
+  const tokenPayload: Omit<JwtPayload, 'jti'> = {
     userId: user.id,
     email: user.email,
     role: user.role,
@@ -142,23 +126,26 @@ export async function login(input: LoginInput) {
 }
 
 export async function refreshToken(token: string) {
-  if (isTokenBlacklisted(token)) {
-    throw AppError.unauthorized('Invalid refresh token');
-  }
-
   try {
     const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as JwtPayload;
 
-    // Verify user still exists
+    const revoked = await prisma.revokedToken.findUnique({ where: { jti: decoded.jti } });
+    if (revoked) {
+      throw AppError.unauthorized('Refresh token has been revoked');
+    }
+
     const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) {
       throw AppError.unauthorized('User no longer exists');
     }
 
-    // Blacklist the old refresh token (refresh token rotation)
-    tokenBlacklist.add(token);
+    // Refresh Token Rotation: Revoke the used refresh token
+    const expiresAt = new Date((decoded.exp || 0) * 1000);
+    await prisma.revokedToken.create({
+      data: { jti: decoded.jti, expiresAt }
+    });
 
-    const tokenPayload: JwtPayload = {
+    const tokenPayload: Omit<JwtPayload, 'jti'> = {
       userId: user.id,
       email: user.email,
       role: user.role,
@@ -186,11 +173,34 @@ export async function refreshToken(token: string) {
   }
 }
 
-export async function logout(token: string) {
-  if (token) {
-    tokenBlacklist.add(token);
-    logger.info('User logged out, token blacklisted');
+export async function logout(accessToken?: string, refreshToken?: string) {
+  const tokensToRevoke = [];
+  
+  if (accessToken) {
+    try {
+      const decodedAccess = jwt.decode(accessToken) as JwtPayload;
+      if (decodedAccess?.jti) tokensToRevoke.push({ jti: decodedAccess.jti, expiresAt: new Date((decodedAccess.exp || 0) * 1000) });
+    } catch (e) {}
   }
+  
+  if (refreshToken) {
+    try {
+      const decodedRefresh = jwt.decode(refreshToken) as JwtPayload;
+      if (decodedRefresh?.jti) tokensToRevoke.push({ jti: decodedRefresh.jti, expiresAt: new Date((decodedRefresh.exp || 0) * 1000) });
+    } catch (e) {}
+  }
+
+  for (const t of tokensToRevoke) {
+    try {
+      await prisma.revokedToken.create({
+        data: { jti: t.jti, expiresAt: t.expiresAt }
+      });
+    } catch (e) {
+      // Ignore if already revoked (unique constraint)
+    }
+  }
+
+  logger.info('User logged out, tokens blacklisted');
   return { success: true };
 }
 

@@ -4,15 +4,15 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: codity
+      POSTGRES_USER: codity
+      POSTGRES_PASSWORD: codity_password
+      POSTGRES_DB: codity_db
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U codity -d codity_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,16 +20,44 @@ services:
   api:
     build:
       context: .
-      dockerfile: packages/api/Dockerfile
+      target: api
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/codity?schema=public
-      - JWT_SECRET=super_secret_jwt_key_here_for_docker
-      - REFRESH_TOKEN_SECRET=super_secret_refresh_key_here_for_docker
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://codity:codity_password@postgres:5432/codity_db?schema=public
+      - JWT_SECRET=${JWT_SECRET:-super_secret_jwt_key_for_codity}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-super_secret_refresh_key_for_codity}
+      - FRONTEND_URL=http://localhost:8080
+      - CORS_ORIGIN=http://localhost:8080
     depends_on:
       postgres:
         condition: service_healthy
+    # Wait for DB to be ready, then run migrations before starting the API
+    command: sh -c "cd packages/api && npx prisma migrate deploy && npm start"
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      - NODE_ENV=production
+      - API_URL=http://api:3000/api/v1
+      - WORKER_NAME=docker-worker-1
+      - CONCURRENCY=5
+      # Note: WORKER_API_KEY must be provided via .env after running db:seed
+      - WORKER_API_KEY=${WORKER_API_KEY}
+    depends_on:
+      - api
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
 
 volumes:
   pgdata:

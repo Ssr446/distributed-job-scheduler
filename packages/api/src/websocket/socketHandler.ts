@@ -8,13 +8,40 @@ import { prisma } from '../config/database.js';
 
 export const setupWebSocket = (io: Server) => {
   // ── Authentication Middleware ──────────────────────────────────────────────
-  io.use((socket: Socket, next) => {
+  io.use(async (socket: Socket, next) => {
     try {
-      const token = socket.handshake.auth?.token as string | undefined;
+      const cookieHeader = socket.request.headers.cookie;
+      let token: string | undefined;
+
+      if (cookieHeader) {
+        // Parse cookies manually
+        const cookies = cookieHeader.split(';').reduce((res, c) => {
+          const [key, val] = c.trim().split('=').map(decodeURIComponent);
+          try {
+            return Object.assign(res, { [key]: JSON.parse(val) });
+          } catch (e) {
+            return Object.assign(res, { [key]: val });
+          }
+        }, {} as any);
+        token = cookies['accessToken'];
+      }
+      
+      // Fallback to handshake auth token for debugging or programmatic access
+      if (!token) {
+        token = socket.handshake.auth?.token;
+      }
+
       if (!token) {
         return next(new Error('Authentication token required'));
       }
       const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+      
+      // Check for token revocation
+      const revoked = await prisma.revokedToken.findUnique({ where: { jti: decoded.jti } });
+      if (revoked) {
+        return next(new Error('Token has been revoked'));
+      }
+
       // Attach user to socket data for later use
       socket.data.user = decoded;
       next();
@@ -29,7 +56,7 @@ export const setupWebSocket = (io: Server) => {
     logger.info({ socketId: socket.id, userId: user.userId }, 'WebSocket client connected');
 
     // Client joins a project-scoped room for targeted broadcasts
-    socket.on('joinProject', async (projectId: string) => {
+    socket.on('join:project', async (projectId: string) => {
       try {
         const project = await prisma.project.findUnique({ where: { id: projectId } });
         if (!project) return;
@@ -47,7 +74,7 @@ export const setupWebSocket = (io: Server) => {
       }
     });
 
-    socket.on('leaveProject', (projectId: string) => {
+    socket.on('leave:project', (projectId: string) => {
       socket.leave(`project:${projectId}`);
     });
 
@@ -64,6 +91,10 @@ export const setupWebSocket = (io: Server) => {
 
   eventBus.on('job.claimed', (job: any) => {
     io.to(`project:${job.projectId}`).emit('jobUpdate', { type: 'claimed', job });
+  });
+
+  eventBus.on('job.started', (job: any) => {
+    io.to(`project:${job.projectId}`).emit('jobUpdate', { type: 'started', job });
   });
 
   eventBus.on('job.completed', (job: any) => {

@@ -1,99 +1,132 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
-import os from 'os';
-import crypto from 'crypto';
 
-const prisma = new PrismaClient();
+const API_URL = process.env.API_URL || 'http://localhost:3000/api';
+// Use the hardcoded full API key from seed for demo purposes
+const WORKER_API_KEY = process.env.WORKER_API_KEY || '11111111-1111-1111-1111-111111111111.test-worker-key-123';
+const QUEUE_ID = process.env.QUEUE_ID || '22222222-2222-2222-2222-222222222222'; // Default seeded high-priority queue
 
-async function main() {
-  const hostname = os.hostname();
-  const pid = process.pid;
-  const workerName = `worker-${hostname}-${pid}`;
+const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5', 10);
+let isShuttingDown = false;
+let activeJobs = 0;
 
-  // 1. Register worker in DB
-  const worker = await prisma.worker.create({
-    data: {
-      name: workerName,
-      hostname,
-      pid,
-      status: 'ONLINE',
-      concurrency: 5,
-      queues: ['*'],
+// Pluggable job handler registry
+const handlers: Record<string, (payload: any) => Promise<any>> = {
+  'charge_card': async (payload) => {
+    console.log('[Handler] Charging card for customer', payload.customerId);
+    if (payload.customerId?.startsWith('bad_')) throw new Error('Card declined: Insufficient funds');
+    await new Promise(r => setTimeout(r, 1000));
+    return { success: true, receiptUrl: 'https://acme.com/receipt/' + Date.now() };
+  },
+  'generate_invoice': async (payload) => {
+    console.log('[Handler] Generating invoice', payload.invoiceId);
+    await new Promise(r => setTimeout(r, 500));
+    return { success: true, pdfUrl: 'https://acme.com/invoice/' + payload.invoiceId + '.pdf' };
+  }
+};
+
+async function fetchApi(path: string, options: RequestInit = {}) {
+  const res = await fetch(\`\${API_URL}\${path}\`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': \`Bearer \${WORKER_API_KEY}\`,
+      ...(options.headers || {})
     }
   });
-  
-  const WORKER_ID = worker.id;
-  console.log('Worker registered with ID:', WORKER_ID);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(\`API Error \${res.status}: \${errText}\`);
+  }
+  return res.json();
+}
 
-  // Heartbeat loop
-  setInterval(async () => {
-    try {
-      await prisma.workerHeartbeat.create({
-        data: { workerId: WORKER_ID, activeJobs: 0 }
-      });
-      await prisma.worker.update({
-        where: { id: WORKER_ID },
-        data: { lastHeartbeatAt: new Date() }
-      });
-    } catch (e) {
-      console.error('Heartbeat failed', e);
-    }
-  }, 10000);
+async function executeJob(job: any) {
+  activeJobs++;
+  const startMs = Date.now();
+  console.log(\`[Worker] Starting job \${job.id} (type: \${job.type})\`);
 
-  // Graceful shutdown
-  const shutdown = async () => {
-    console.log('Shutting down worker...');
-    await prisma.worker.update({
-      where: { id: WORKER_ID },
-      data: { status: 'OFFLINE', deregisteredAt: new Date() }
+  try {
+    // 1. Call start API
+    await fetchApi(\`/jobs/\${job.id}/start\`, { method: 'POST' });
+
+    // 2. Execute handler
+    const handler = handlers[job.type];
+    if (!handler) throw new Error(\`No handler registered for job type: \${job.type}\`);
+    const result = await handler(job.payload);
+
+    // 3. Call complete API
+    const durationMs = Date.now() - startMs;
+    await fetchApi(\`/jobs/\${job.id}/complete\`, {
+      method: 'POST',
+      body: JSON.stringify({ result, durationMs })
     });
-    await prisma.$disconnect();
+    console.log(\`[Worker] Completed job \${job.id} in \${durationMs}ms\`);
+
+  } catch (err: any) {
+    // 4. Call fail API on error
+    const durationMs = Date.now() - startMs;
+    const errorMsg = err.message || 'Unknown error';
+    console.error(\`[Worker] Failed job \${job.id} in \${durationMs}ms:\`, errorMsg);
+    
+    try {
+      await fetchApi(\`/jobs/\${job.id}/fail\`, {
+        method: 'POST',
+        body: JSON.stringify({ error: errorMsg, durationMs })
+      });
+    } catch (failErr: any) {
+      console.error(\`[Worker] Critical: Failed to report job failure for \${job.id}:\`, failErr.message);
+    }
+  } finally {
+    activeJobs--;
+  }
+}
+
+async function main() {
+  console.log('Starting HTTP polling worker with concurrency', CONCURRENCY);
+  console.log('Target Queue:', QUEUE_ID);
+
+  const shutdown = async () => {
+    console.log('Shutting down worker. Waiting for in-flight jobs to finish...');
+    isShuttingDown = true;
+    let waitMs = 0;
+    while (activeJobs > 0 && waitMs < 10000) {
+      await new Promise(r => setTimeout(r, 500));
+      waitMs += 500;
+    }
+    console.log('Worker shutdown complete.');
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // Poll for jobs
-  setInterval(async () => {
-    try {
-      // Claim job in a single transaction
-      const claimedJob = await prisma.$transaction(async (tx) => {
-        const jobs = await tx.$queryRaw<any[]>`
-          SELECT id FROM "jobs"
-          WHERE status = 'QUEUED'
-          ORDER BY priority DESC, "createdAt" ASC
-          LIMIT 1
-          FOR UPDATE SKIP LOCKED
-        `;
+  while (!isShuttingDown) {
+    if (activeJobs >= CONCURRENCY) {
+      await new Promise(r => setTimeout(r, 200));
+      continue;
+    }
 
-        if (jobs.length > 0) {
-          const jobId = jobs[0].id;
-          return tx.job.update({
-            where: { id: jobId },
-            data: { status: 'RUNNING', claimedById: WORKER_ID, startedAt: new Date() }
-          });
-        }
-        return null;
+    try {
+      const response = await fetchApi(\`/queues/\${QUEUE_ID}/jobs/claim\`, {
+        method: 'POST',
+        body: JSON.stringify({ limit: 1 }) // Claim 1 at a time to keep local loop simple
       });
 
-      if (claimedJob) {
-        console.log(`Claimed job ${claimedJob.id} (type: ${claimedJob.type})`);
-
-        // Simulate execution
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        // Complete the job
-        await prisma.job.update({
-          where: { id: claimedJob.id },
-          data: { status: 'COMPLETED', completedAt: new Date(), result: { msg: 'Success' } }
-        });
-        
-        console.log(`Completed job ${claimedJob.id}`);
+      const claimedJobs = response.data || [];
+      if (claimedJobs.length > 0) {
+        // We do not await executeJob here so we can continue polling up to concurrency limit
+        executeJob(claimedJobs[0]);
+      } else {
+        // No jobs, sleep before polling again
+        await new Promise(r => setTimeout(r, 1000));
       }
-    } catch (err) {
-      console.error('Error in job loop:', err);
+    } catch (err: any) {
+      console.error('[Worker] Poll error:', err.message);
+      await new Promise(r => setTimeout(r, 2000));
     }
-  }, 1000);
+  }
 }
 
-main().catch(console.error);
+main().catch(err => {
+  console.error('[Worker] Fatal error', err);
+  process.exit(1);
+});

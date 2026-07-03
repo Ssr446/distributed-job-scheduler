@@ -10,7 +10,7 @@ export const rateLimiter = rateLimit({
   handler: (_req, res) => {
     sendError(res, 429, 'TOO_MANY_REQUESTS', 'Rate limit exceeded. Please try again later.');
   },
-  skip: () => env.NODE_ENV === 'test',
+  skip: (req: any) => env.NODE_ENV === 'test' || req.authMethod === 'apiKey',
 });
 
 export const strictRateLimiter = rateLimit({
@@ -20,6 +20,17 @@ export const strictRateLimiter = rateLimit({
   legacyHeaders: false,
   handler: (_req, res) => {
     sendError(res, 429, 'TOO_MANY_REQUESTS', 'Rate limit exceeded. Please try again later.');
+  },
+  skip: (req: any) => env.NODE_ENV === 'test' || req.authMethod === 'apiKey',
+});
+
+export const workerRateLimiter = rateLimit({
+  windowMs: 60000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    sendError(res, 429, 'TOO_MANY_REQUESTS', 'Worker rate limit exceeded.');
   },
   skip: () => env.NODE_ENV === 'test',
 });

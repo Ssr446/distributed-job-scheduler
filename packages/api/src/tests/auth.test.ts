@@ -9,7 +9,7 @@ describe('Auth Module', () => {
 
   it('should register a new user', async () => {
     const res = await request(app)
-      .post('/api/auth/register')
+      .post('/api/v1/auth/register')
       .send({
         email: 'test@example.com',
         password: 'Password123!',
@@ -25,7 +25,7 @@ describe('Auth Module', () => {
 
   it('should login the user', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({
         email: 'test@example.com',
         password: 'Password123!'
@@ -40,7 +40,7 @@ describe('Auth Module', () => {
 
   it('should fetch the current user profile', async () => {
     const res = await request(app)
-      .get('/api/auth/me')
+      .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${userToken}`);
 
     expect(res.status).toBe(200);
@@ -50,7 +50,7 @@ describe('Auth Module', () => {
 
   it('should fail with invalid password', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/v1/auth/login')
       .send({
         email: 'test@example.com',
         password: 'WrongPassword123!'

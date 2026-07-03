@@ -1,12 +1,9 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api' });
-
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
+export const api = axios.create({ 
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1',
+  withCredentials: true
 });
 
 let isRefreshing = false;
@@ -29,8 +26,7 @@ api.interceptors.response.use(
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers.Authorization = 'Bearer ' + token;
+        }).then(() => {
           return api(originalRequest);
         }).catch(err => Promise.reject(err));
       }
@@ -38,20 +34,11 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
       
-      const refreshToken = useAuthStore.getState().refreshToken;
-      if (!refreshToken) {
-        useAuthStore.getState().logout();
-        return Promise.reject(error);
-      }
-
       try {
-        const { data } = await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken });
-        const newToken = data.data.accessToken;
-        useAuthStore.getState().setToken(newToken);
-        
-        processQueue(null, newToken);
+        await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
+        // The new access token is automatically set in HttpOnly cookies
+        processQueue(null);
         isRefreshing = false;
-        originalRequest.headers.Authorization = 'Bearer ' + newToken;
         return api(originalRequest);
       } catch (err) {
         processQueue(err, null);

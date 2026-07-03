@@ -238,6 +238,7 @@ model Worker {
   claimedJobs Job[]
   executions  JobExecution[]
   heartbeats  WorkerHeartbeat[]
+  apiKeys     ApiKey[]
 
   @@map("workers")
 }
@@ -314,4 +315,28 @@ model JobDependency {
 
   @@unique([jobId, dependsOnJobId])
   @@map("job_dependencies")
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  jti       String   @unique
+  revokedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([jti])
+  @@map("revoked_tokens")
+}
+
+model ApiKey {
+  id        String    @id @default(uuid())
+  keyHash   String
+  name      String
+  workerId  String
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("api_keys")
 }

@@ -346,11 +346,26 @@ export default function Layout() {
   };
 
   useEffect(() => {
+    let currentProjectId: string | null = null;
     const socket = (async () => {
-      const { getSocket, disconnectSocket } = await import('../services/socket');
+      const { getSocket, disconnectSocket, joinProject, leaveProject } = await import('../services/socket');
       const { toast } = await import('react-hot-toast');
       const s = getSocket();
       
+      // Join project room to receive broadcasts
+      try {
+        const orgRes = await api.get('/orgs');
+        if (orgRes.data.data?.[0]) {
+          const projRes = await api.get(`/orgs/${orgRes.data.data[0].id}/projects`);
+          if (projRes.data.data?.[0]) {
+            currentProjectId = projRes.data.data[0].id;
+            joinProject(currentProjectId);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to join project room', err);
+      }
+
       const handleJobUpdate = (job: any) => {
         if (job.status === 'COMPLETED') {
           toast.success(`Job ${job.id.substring(0, 8)} completed!`);

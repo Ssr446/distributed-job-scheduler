@@ -28,13 +28,13 @@ export const getJob = async (req: Request, res: Response, next: NextFunction) =>
 };
 export const retryJob = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const job = await jobsService.retryJob((req.params.id as string));
+    const job = await jobsService.retryJob((req.params.id as string), req.user?.userId);
     sendSuccess(res, job);
   } catch (error) { next(error); }
 };
 export const cancelJob = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const job = await jobsService.cancelJob((req.params.id as string));
+    const job = await jobsService.cancelJob((req.params.id as string), req.user?.userId);
     sendSuccess(res, job);
   } catch (error) { next(error); }
 };
@@ -47,12 +47,39 @@ export const getJobLogs = async (req: Request, res: Response, next: NextFunction
 
 export const claimJobs = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { workerId, limit, shardKey } = req.body;
+    const workerId = req.worker?.id;
     if (!workerId) {
-      res.status(400).json({ success: false, error: { code: 'BAD_REQUEST', message: 'workerId is required' } });
+      res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'worker identity missing' } });
       return;
     }
+    const { limit, shardKey } = req.body;
     const jobs = await jobsService.claimJobs((req.params.queueId as string), workerId, parseInt(limit) || 1, shardKey);
     sendSuccess(res, jobs);
+  } catch (error) { next(error); }
+};
+
+export const startJob = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workerId = req.worker?.id!;
+    const job = await jobsService.startJob(req.params.id, workerId);
+    sendSuccess(res, job);
+  } catch (error) { next(error); }
+};
+
+export const completeJob = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workerId = req.worker?.id!;
+    const { result, durationMs } = req.body;
+    const job = await jobsService.completeJob(req.params.id, workerId, result, durationMs);
+    sendSuccess(res, job);
+  } catch (error) { next(error); }
+};
+
+export const failJob = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const workerId = req.worker?.id!;
+    const { error, durationMs } = req.body;
+    const job = await jobsService.failJob(req.params.id, workerId, error, durationMs);
+    sendSuccess(res, job);
   } catch (error) { next(error); }
 };

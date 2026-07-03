@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -45,6 +46,7 @@ async function main() {
   await prisma.jobExecution.deleteMany({});
   await prisma.workerHeartbeat.deleteMany({});
   await prisma.job.deleteMany({});
+  await prisma.apiKey.deleteMany({});
   await prisma.worker.deleteMany({});
   await prisma.queue.deleteMany({});
   await prisma.retryPolicy.deleteMany({});
@@ -84,6 +86,7 @@ async function main() {
   // 6. Create Queues
   const paymentHighQ = await prisma.queue.create({
     data: {
+      id: '22222222-2222-2222-2222-222222222222',
       name: 'high-priority',
       projectId: paymentProject.id,
       priority: 100,
@@ -115,6 +118,20 @@ async function main() {
       lastHeartbeatAt: new Date(),
     }
   });
+
+  const rawSecret = 'test-worker-key-123';
+  const keyHash = crypto.createHash('sha256').update(rawSecret).digest('hex');
+  const apiKeyId = '11111111-1111-1111-1111-111111111111';
+  const apiKey = await prisma.apiKey.create({
+    data: {
+      id: apiKeyId,
+      name: 'Test Worker Key',
+      keyHash,
+      workerId: worker1.id
+    }
+  });
+  const fullApiKey = `${apiKey.id}.${rawSecret}`;
+  console.log(`Created worker1 with API key: ${fullApiKey}`);
 
   const worker2 = await prisma.worker.create({
     data: {

@@ -6,7 +6,7 @@ export function getSocket(): Socket {
   if (!socket) {
     const token = localStorage.getItem('token');
     socket = io('/', {
-      auth: { token },
+      withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
