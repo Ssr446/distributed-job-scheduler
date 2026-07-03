@@ -2,7 +2,7 @@
   "name": "distributed-job-scheduler",
   "version": "1.0.0",
   "private": true,
-  "description": "Production-grade distributed job scheduling platform",
+  "description": "A multi-tenant distributed job scheduling platform featuring atomic claiming, resilient state transitions, DLQ, and a live WebSocket dashboard.",
   "workspaces": [
     "packages/api",
     "packages/worker",
