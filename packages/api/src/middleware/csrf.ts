@@ -8,7 +8,8 @@ export const requireCsrfSafe = (req: Request, res: Response, next: NextFunction)
   }
   
   const origin = req.headers.origin || req.headers.referer;
-  if (!origin || !origin.includes(env.FRONTEND_URL)) {
+  // Use CORS_ORIGIN as the single source of truth for allowed frontend origins
+  if (!origin || !origin.includes(env.CORS_ORIGIN)) {
     return res.status(403).json({ success: false, error: { message: 'Invalid origin (CSRF)' } });
   }
   
