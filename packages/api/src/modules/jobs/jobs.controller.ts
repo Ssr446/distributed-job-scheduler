@@ -61,7 +61,7 @@ export const claimJobs = async (req: Request, res: Response, next: NextFunction)
 export const startJob = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const workerId = req.worker?.id!;
-    const job = await jobsService.startJob(req.params.id, workerId);
+    const job = await jobsService.startJob(req.params.id as string, workerId);
     sendSuccess(res, job);
   } catch (error) { next(error); }
 };
@@ -70,7 +70,7 @@ export const completeJob = async (req: Request, res: Response, next: NextFunctio
   try {
     const workerId = req.worker?.id!;
     const { result, durationMs } = req.body;
-    const job = await jobsService.completeJob(req.params.id, workerId, result, durationMs);
+    const job = await jobsService.completeJob(req.params.id as string, workerId, result, durationMs);
     sendSuccess(res, job);
   } catch (error) { next(error); }
 };
@@ -79,7 +79,7 @@ export const failJob = async (req: Request, res: Response, next: NextFunction) =
   try {
     const workerId = req.worker?.id!;
     const { error, durationMs } = req.body;
-    const job = await jobsService.failJob(req.params.id, workerId, error, durationMs);
+    const job = await jobsService.failJob(req.params.id as string, workerId, error, durationMs);
     sendSuccess(res, job);
   } catch (error) { next(error); }
 };

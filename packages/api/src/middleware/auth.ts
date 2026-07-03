@@ -3,7 +3,6 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { logger } from '../config/logger.js';
-import { isTokenBlacklisted } from '../modules/auth/auth.service.js';
 import crypto from 'crypto';
 import { prisma } from '../config/database.js';
 
@@ -12,6 +11,7 @@ export interface JwtPayload {
   email: string;
   role: string;
   jti: string;
+  exp?: number;
 }
 
 declare global {
