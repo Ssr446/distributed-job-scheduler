@@ -25,17 +25,17 @@ const handlers: Record<string, (payload: any) => Promise<any>> = {
 };
 
 async function fetchApi(path: string, options: RequestInit = {}) {
-  const res = await fetch(\`\${API_URL}\${path}\`, {
+  const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': \`Bearer \${WORKER_API_KEY}\`,
+      'Authorization': `Bearer ${WORKER_API_KEY}`,
       ...(options.headers || {})
     }
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(\`API Error \${res.status}: \${errText}\`);
+    throw new Error(`API Error ${res.status}: ${errText}`);
   }
   return res.json();
 }
@@ -43,38 +43,38 @@ async function fetchApi(path: string, options: RequestInit = {}) {
 async function executeJob(job: any) {
   activeJobs++;
   const startMs = Date.now();
-  console.log(\`[Worker] Starting job \${job.id} (type: \${job.type})\`);
+  console.log(`[Worker] Starting job ${job.id} (type: ${job.type})`);
 
   try {
     // 1. Call start API
-    await fetchApi(\`/jobs/\${job.id}/start\`, { method: 'POST' });
+    await fetchApi(`/jobs/${job.id}/start`, { method: 'POST' });
 
     // 2. Execute handler
     const handler = handlers[job.type];
-    if (!handler) throw new Error(\`No handler registered for job type: \${job.type}\`);
+    if (!handler) throw new Error(`No handler registered for job type: ${job.type}`);
     const result = await handler(job.payload);
 
     // 3. Call complete API
     const durationMs = Date.now() - startMs;
-    await fetchApi(\`/jobs/\${job.id}/complete\`, {
+    await fetchApi(`/jobs/${job.id}/complete`, {
       method: 'POST',
       body: JSON.stringify({ result, durationMs })
     });
-    console.log(\`[Worker] Completed job \${job.id} in \${durationMs}ms\`);
+    console.log(`[Worker] Completed job ${job.id} in ${durationMs}ms`);
 
   } catch (err: any) {
     // 4. Call fail API on error
     const durationMs = Date.now() - startMs;
     const errorMsg = err.message || 'Unknown error';
-    console.error(\`[Worker] Failed job \${job.id} in \${durationMs}ms:\`, errorMsg);
+    console.error(`[Worker] Failed job ${job.id} in ${durationMs}ms:`, errorMsg);
     
     try {
-      await fetchApi(\`/jobs/\${job.id}/fail\`, {
+      await fetchApi(`/jobs/${job.id}/fail`, {
         method: 'POST',
         body: JSON.stringify({ error: errorMsg, durationMs })
       });
     } catch (failErr: any) {
-      console.error(\`[Worker] Critical: Failed to report job failure for \${job.id}:\`, failErr.message);
+      console.error(`[Worker] Critical: Failed to report job failure for ${job.id}:`, failErr.message);
     }
   } finally {
     activeJobs--;
@@ -106,7 +106,7 @@ async function main() {
     }
 
     try {
-      const response = await fetchApi(\`/queues/\${QUEUE_ID}/jobs/claim\`, {
+      const response = await fetchApi(`/queues/${QUEUE_ID}/jobs/claim`, {
         method: 'POST',
         body: JSON.stringify({ limit: 1 }) // Claim 1 at a time to keep local loop simple
       });
