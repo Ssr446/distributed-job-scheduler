@@ -1,0 +1,29 @@
+{
+  "name": "distributed-job-scheduler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade distributed job scheduling platform",
+  "workspaces": [
+    "packages/api",
+    "packages/worker",
+    "packages/dashboard"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,worker,dashboard -c blue,green,magenta \"npm run dev -w packages/api\" \"npm run dev -w packages/worker\" \"npm run dev -w packages/dashboard\"",
+    "dev:api": "npm run dev -w packages/api",
+    "dev:worker": "npm run dev -w packages/worker",
+    "dev:dashboard": "npm run dev -w packages/dashboard",
+    "build": "npm run build -w packages/api && npm run build -w packages/worker && npm run build -w packages/dashboard",
+    "test": "npm run test -w packages/api && npm run test -w packages/worker",
+    "db:migrate": "npm run db:migrate -w packages/api",
+    "db:seed": "npm run db:seed -w packages/api",
+    "db:reset": "npm run db:reset -w packages/api",
+    "db:studio": "npm run db:studio -w packages/api",
+    "lint": "eslint packages/*/src --ext .ts,.tsx",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx}\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3"
+  }
+}

@@ -1,0 +1,317 @@
+// Distributed Job Scheduler — Prisma Schema
+// 14 tables for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────────────
+// Enums
+// ──────────────────────────────────────
+
+enum USER_ROLE {
+  ADMIN
+  MEMBER
+}
+
+enum ORG_ROLE {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum RETRY_STRATEGY {
+  FIXED
+  LINEAR
+  EXPONENTIAL
+}
+
+enum JOB_STATUS {
+  QUEUED
+  SCHEDULED
+  WAITING
+  CLAIMED
+  RUNNING
+  COMPLETED
+  FAILED
+  DEAD
+  CANCELLED
+}
+
+enum EXECUTION_STATUS {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum WORKER_STATUS {
+  ONLINE
+  BUSY
+  DRAINING
+  OFFLINE
+}
+
+enum LOG_LEVEL {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+// ──────────────────────────────────────
+// Models
+// ──────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         USER_ROLE @default(MEMBER)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  orgMemberships OrgMembership[]
+  projectsCreated Project[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  memberships OrgMembership[]
+  projects    Project[]
+
+  @@map("organizations")
+}
+
+model OrgMembership {
+  userId String
+  orgId  String
+  role   ORG_ROLE @default(MEMBER)
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orgId])
+  @@map("org_memberships")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  orgId       String
+  name        String
+  description String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  organization  Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy     User?         @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  queues        Queue[]
+  retryPolicies RetryPolicy[]
+
+  @@map("projects")
+}
+
+model RetryPolicy {
+  id                String         @id @default(uuid())
+  projectId         String
+  name              String
+  strategy          RETRY_STRATEGY @default(EXPONENTIAL)
+  maxRetries        Int            @default(3)
+  initialDelayMs    Int            @default(1000)
+  maxDelayMs        Int            @default(60000)
+  backoffMultiplier Float          @default(2.0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  queues  Queue[]
+
+  @@map("retry_policies")
+}
+
+model Queue {
+  id               String   @id @default(uuid())
+  projectId        String
+  name             String
+  priority         Int      @default(0)
+  concurrencyLimit Int      @default(5)
+  retryPolicyId    String?
+  isPaused         Boolean  @default(false)
+  maxJobDurationMs Int      @default(300000)
+  shardKey         String?
+  rateLimitPerSec  Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  retryPolicy RetryPolicy? @relation(fields: [retryPolicyId], references: [id], onDelete: SetNull)
+  jobs        Job[]
+  dlqEntries  DeadLetterQueue[]
+
+  @@unique([projectId, name])
+  @@map("queues")
+}
+
+model Job {
+  id              String         @id @default(uuid())
+  queueId         String
+  type            String
+  payload         Json
+  status          JOB_STATUS     @default(QUEUED)
+  priority        Int            @default(0)
+  scheduledAt     DateTime?
+  cronExpression  String?
+  batchId         String?
+  attempt         Int            @default(0)
+  maxRetries      Int            @default(3)
+  retryStrategy   RETRY_STRATEGY @default(EXPONENTIAL)
+  retryDelayMs    Int            @default(1000)
+  result          Json?
+  error           String?
+  claimedById     String?
+  claimedAt       DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  nextRetryAt     DateTime?
+  idempotencyKey  String?        @unique
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  queue        Queue           @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  claimedBy    Worker?         @relation(fields: [claimedById], references: [id], onDelete: SetNull)
+  executions   JobExecution[]
+  logs         JobLog[]
+  dlqEntries   DeadLetterQueue[]
+  scheduledJob ScheduledJob?
+  dependentOn  JobDependency[] @relation("DependentJob")
+  dependencyOf JobDependency[] @relation("DependencyTarget")
+
+  @@index([queueId, status, priority])
+  @@index([status])
+  @@index([batchId])
+  @@index([nextRetryAt])
+  @@map("jobs")
+}
+
+model JobExecution {
+  id          String           @id @default(uuid())
+  jobId       String
+  workerId    String
+  attempt     Int
+  status      EXECUTION_STATUS @default(RUNNING)
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+  result      Json?
+  error       String?
+  errorStack  String?
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("job_executions")
+}
+
+model Worker {
+  id              String        @id @default(uuid())
+  name            String
+  hostname        String
+  pid             Int
+  status          WORKER_STATUS @default(ONLINE)
+  concurrency     Int           @default(5)
+  activeJobs      Int           @default(0)
+  queues          String[]
+  lastHeartbeatAt DateTime?
+  registeredAt    DateTime      @default(now())
+  deregisteredAt  DateTime?
+
+  claimedJobs Job[]
+  executions  JobExecution[]
+  heartbeats  WorkerHeartbeat[]
+
+  @@map("workers")
+}
+
+model WorkerHeartbeat {
+  id          String   @id @default(uuid())
+  workerId    String
+  timestamp   DateTime @default(now())
+  activeJobs  Int
+  cpuUsage    Float?
+  memoryUsage Float?
+
+  worker Worker @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId, timestamp])
+  @@map("worker_heartbeats")
+}
+
+model JobLog {
+  id        String    @id @default(uuid())
+  jobId     String
+  level     LOG_LEVEL @default(INFO)
+  message   String
+  metadata  Json?
+  timestamp DateTime  @default(now())
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, timestamp])
+  @@map("job_logs")
+}
+
+model DeadLetterQueue {
+  id             String    @id @default(uuid())
+  jobId          String
+  queueId        String
+  reason         String
+  failureSummary String?
+  failedAt       DateTime  @default(now())
+  retryCount     Int
+  lastError      String?
+  requeued       Boolean   @default(false)
+  requeuedAt     DateTime?
+
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  queue Queue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@index([queueId])
+  @@map("dead_letter_queue")
+}
+
+model ScheduledJob {
+  id             String    @id @default(uuid())
+  jobId          String    @unique
+  cronExpression String
+  nextRunAt      DateTime?
+  lastRunAt      DateTime?
+  isActive       Boolean   @default(true)
+  timezone       String    @default("UTC")
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([nextRunAt])
+  @@map("scheduled_jobs")
+}
+
+model JobDependency {
+  id             String @id @default(uuid())
+  jobId          String
+  dependsOnJobId String
+
+  job       Job @relation("DependentJob", fields: [jobId], references: [id], onDelete: Cascade)
+  dependsOnJob Job @relation("DependencyTarget", fields: [dependsOnJobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, dependsOnJobId])
+  @@map("job_dependencies")
+}
