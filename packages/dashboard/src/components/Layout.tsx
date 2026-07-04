@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { useProjectStore } from '../store/projectStore';
 import { api } from '../services/api';
 import {
   Layers, LayoutDashboard, ListTree, Server, AlertOctagon,
@@ -332,6 +333,12 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
+  const { projects, activeProjectId, fetchProjects, setActiveProject } = useProjectStore();
+
+  useEffect(() => {
+    fetchProjects();
+  }, []);
+
   const handleLogout = () => { logout(); navigate('/login'); };
 
   const toggleTheme = () => {
@@ -346,25 +353,15 @@ export default function Layout() {
   };
 
   useEffect(() => {
-    let currentProjectId: string | null = null;
+
     const socket = (async () => {
       const { getSocket, disconnectSocket, joinProject, leaveProject } = await import('../services/socket');
       const { toast } = await import('react-hot-toast');
       const s = getSocket();
       
-      // Join project room to receive broadcasts
-      try {
-        const orgRes = await api.get('/orgs');
-        if (orgRes.data.data?.[0]) {
-          const projRes = await api.get(`/orgs/${orgRes.data.data[0].id}/projects`);
-          if (projRes.data.data?.[0]) {
-            currentProjectId = projRes.data.data[0].id;
-            joinProject(currentProjectId);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to join project room', err);
-      }
+      // Note: We deliberately do NOT join a project room here.
+      // That responsibility was moved to per-page useEffects (e.g., JobExplorer, Metrics)
+      // which join/leave based on the actual project they are displaying.
 
       const handleJobUpdate = (job: any) => {
         if (job.status === 'COMPLETED') {
@@ -440,6 +437,23 @@ export default function Layout() {
             <p className="text-[10px] -mt-0.5" style={{ color: 'var(--text-muted)' }}>Job Orchestration</p>
           </div>
         </div>
+
+        {/* Project Switcher */}
+        {projects.length > 0 && (
+          <div className="px-6 pb-2">
+            <label className="block text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'var(--text-faint)' }}>Project</label>
+            <select 
+              value={activeProjectId || ''}
+              onChange={e => setActiveProject(e.target.value)}
+              className="w-full text-sm py-1.5 px-2 rounded-lg outline-none cursor-pointer border border-[var(--border-base)] transition-colors focus:border-[var(--border-active)]"
+              style={{ background: 'var(--bg-input)', color: 'var(--text-primary)' }}
+            >
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="px-3 flex-1 overflow-y-auto mt-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest mb-3 px-3" style={{ color: 'var(--text-faint)' }}>Navigation</p>

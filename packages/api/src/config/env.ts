@@ -20,24 +20,28 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url().default('postgresql://postgres:postgres@localhost:5432/scheduler'),
 
-  // JWT secrets — no defaults, required in production
+  // JWT secrets — fallback is safe for local dev; production must set proper values
   JWT_SECRET: z
     .string()
     .min(32, 'JWT_SECRET must be at least 32 characters')
-    .default('dev-jwt-secret-change-in-production'),
+    .default('dev-jwt-secret-change-in-production-xxxxx'),
   JWT_REFRESH_SECRET: z
     .string()
     .min(32, 'JWT_REFRESH_SECRET must be at least 32 characters')
-    .default('dev-jwt-refresh-secret-change-in-production'),
+    .default('dev-jwt-refresh-secret-change-in-production-xxxxx'),
   JWT_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
+  // Accept a comma-separated list of origins so Render env var can be one URL,
+  // local dev can add others without changing code.
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
 
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(200),
 
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+
+  FRONTEND_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

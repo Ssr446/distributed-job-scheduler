@@ -6,7 +6,7 @@ interface AuthState {
   user: any | null;
   login: (token: string, refreshToken: string, user: any) => void;
   logout: () => void;
-  setToken: (token: string) => void;
+  loadUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -25,8 +25,17 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('user');
     set({ token: null, refreshToken: null, user: null });
   },
-  setToken: (token) => {
-    localStorage.setItem('token', token);
-    set({ token });
+  loadUser: async () => {
+    try {
+      // Need to dynamically import api to avoid circular dependencies if any, 
+      // but api.ts doesn't import authStore, so static import is fine.
+      const { api } = await import('../services/api');
+      const res = await api.get('/auth/me');
+      const userData = res.data.data;
+      localStorage.setItem('user', JSON.stringify(userData));
+      set({ user: userData });
+    } catch (err) {
+      console.error('Failed to load user', err);
+    }
   }
 }));

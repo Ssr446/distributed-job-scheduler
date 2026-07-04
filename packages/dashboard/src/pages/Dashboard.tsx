@@ -4,26 +4,28 @@ import { joinProject, leaveProject } from '../services/socket';
 import { Activity, Server, CheckCircle2, XCircle, Clock, Zap, Loader2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
+import { useProjectStore } from '../store/projectStore';
 
 export default function Dashboard() {
+  const { activeProjectId } = useProjectStore();
   const [stats, setStats] = useState({ totalJobs: 0, completedJobs: 0, failedJobs: 0, activeWorkers: 0, throughputLastHour: [] });
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const orgRes = await api.get('/orgs');
-        const org = orgRes.data.data[0];
-        if (!org) return;
+    let currentJoinedId: string | null = null;
+    let interval: ReturnType<typeof setInterval>;
 
-        const projRes = await api.get(`/orgs/${org.id}/projects`);
-        const project = projRes.data.data[0];
-        if (!project) return;
+    async function loadData() {
+      if (!activeProjectId) return;
+      try {
+        if (currentJoinedId !== activeProjectId) {
+          if (currentJoinedId) leaveProject(currentJoinedId);
+          joinProject(activeProjectId);
+          currentJoinedId = activeProjectId;
+        }
         
-        joinProject(project.id);
-        
-        const metricsRes = await api.get(`/projects/${project.id}/metrics`);
+        const metricsRes = await api.get(`/projects/${activeProjectId}/metrics`);
         
         // Format dates for the chart
         const formattedMetrics = {
@@ -35,11 +37,13 @@ export default function Dashboard() {
         };
         setStats(formattedMetrics);
 
-        const queuesRes = await api.get(`/projects/${project.id}/queues`);
+        const queuesRes = await api.get(`/projects/${activeProjectId}/queues`);
         const firstQueue = queuesRes.data.data[0];
         if (firstQueue) {
           const jobsRes = await api.get(`/queues/${firstQueue.id}/jobs?limit=10`);
           setJobs(jobsRes.data.data);
+        } else {
+          setJobs([]);
         }
       } catch (e) {
         console.error('Error loading real data:', e);
@@ -47,22 +51,19 @@ export default function Dashboard() {
         setLoading(false);
       }
     }
-    loadData();
-    const interval = setInterval(loadData, 5000);
-    return () => {
-      clearInterval(interval);
-      // We don't have the project id in the cleanup directly unless we store it in a ref or state
-      // We can rely on socket disconnect or explicit state
-    };
-  }, []);
 
-  // Cleanup project on unmount if we have it
-  useEffect(() => {
+    if (activeProjectId) {
+      loadData();
+      interval = setInterval(loadData, 5000);
+    } else {
+      setLoading(true);
+    }
+
     return () => {
-      // If we had a project in state we could leave it here, but we don't store it in Dashboard currently.
-      // We can just leave all or let the socket disconnect handle it.
+      if (interval) clearInterval(interval);
+      if (currentJoinedId) leaveProject(currentJoinedId);
     };
-  }, []);
+  }, [activeProjectId]);
 
   const chartData = stats.throughputLastHour.length > 0 
     ? stats.throughputLastHour 

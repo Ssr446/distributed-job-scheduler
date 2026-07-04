@@ -16,12 +16,18 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError('');
+    console.log("Submitting login with:", { email, password });
     try {
       const res = await api.post('/auth/login', { email, password });
       login(res.data.data.accessToken, res.data.data.refreshToken, res.data.data.user);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Login failed');
+      const errorData = err.response?.data?.error;
+      if (errorData?.code === 'VALIDATION_ERROR' && errorData?.details?.length > 0) {
+        setError(errorData.details.map((d: any) => d.message).join(', '));
+      } else {
+        setError(errorData?.message || 'Login failed');
+      }
     } finally {
       setLoading(false);
     }

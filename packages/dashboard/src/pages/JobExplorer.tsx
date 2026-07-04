@@ -3,9 +3,11 @@ import { api } from '../services/api';
 import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, Search, Filter, RefreshCw, X, Play, RotateCcw, FileText } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
+import { useProjectStore } from '../store/projectStore';
 
 export default function JobExplorer() {
   const [jobs, setJobs] = useState<any[]>([]);
+  const { activeProjectId } = useProjectStore();
   const [loading, setLoading] = useState(true);
   const [queues, setQueues] = useState<any[]>([]);
   
@@ -14,29 +16,17 @@ export default function JobExplorer() {
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [searchType, setSearchType] = useState<string>('');
 
-  const [projectId, setProjectId] = useState<string>('');
-
   const loadData = async () => {
+    if (!activeProjectId) return;
     try {
       setLoading(true);
-      const orgRes = await api.get('/orgs');
-      const org = orgRes.data.data[0];
-      if (!org) return;
-
-      const projRes = await api.get(`/orgs/${org.id}/projects`);
-      const project = projRes.data.data[0];
-      if (!project) return;
-      
-      setProjectId(project.id);
 
       // Load queues for filter dropdown
-      const queuesRes = await api.get(`/projects/${project.id}/queues`);
+      const queuesRes = await api.get(`/projects/${activeProjectId}/queues`);
       const queueList = queuesRes.data.data;
       setQueues(queueList);
 
       // Load jobs
-      // In a real app we'd fetch jobs for all queues, but the current API only supports jobs per queue
-      // So we'll fetch from the selected queue, or the first queue if none selected
       const queueIdToFetch = selectedQueue || queueList[0]?.id;
       
       if (queueIdToFetch) {
@@ -46,6 +36,8 @@ export default function JobExplorer() {
         
         const jobsRes = await api.get(url);
         setJobs(jobsRes.data.data.items || jobsRes.data.data); // Handle both paginated and flat arrays
+      } else {
+        setJobs([]);
       }
     } catch (e) {
       console.error(e);
@@ -55,15 +47,17 @@ export default function JobExplorer() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [selectedQueue, selectedStatus]);
+    if (activeProjectId) {
+      loadData();
+    }
+  }, [activeProjectId, selectedQueue, selectedStatus]);
 
   useEffect(() => {
-    if (projectId) {
-      joinProject(projectId);
-      return () => leaveProject(projectId);
+    if (activeProjectId) {
+      joinProject(activeProjectId);
+      return () => leaveProject(activeProjectId);
     }
-  }, [projectId]);
+  }, [activeProjectId]);
 
   const handleRetry = async (jobId: string) => {
     try {

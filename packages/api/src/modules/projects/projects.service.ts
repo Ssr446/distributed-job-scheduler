@@ -28,6 +28,32 @@ export async function createProject(orgId: string, userId: string, input: Create
   return project;
 }
 
+export async function listOrgProjects(orgId: string, page: number, limit: number) {
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await Promise.all([
+    prisma.project.findMany({
+      where: { orgId },
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'asc' }, // Guarantee order so seeded data appears
+      include: {
+        _count: {
+          select: { queues: true },
+        },
+      },
+    }),
+    prisma.project.count({ where: { orgId } }),
+  ]);
+
+  return {
+    items,
+    total,
+    page,
+    limit,
+  };
+}
+
 export async function listProjects(orgId: string, page = 1, limit = 20) {
   const skip = (page - 1) * limit;
 
@@ -36,7 +62,7 @@ export async function listProjects(orgId: string, page = 1, limit = 20) {
       where: { orgId },
       skip,
       take: limit,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' }, // Guarantee order so seeded Payment Service appears first
       include: {
         createdBy: {
           select: { id: true, email: true, name: true },

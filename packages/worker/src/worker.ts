@@ -1,10 +1,9 @@
 import 'dotenv/config';
 
-const API_URL = process.env.API_URL || 'http://localhost:3000/api';
-// Use the hardcoded full API key from seed for demo purposes
+const API_URL = process.env.API_URL || `http://127.0.0.1:${process.env.PORT || 3000}/api/v1`;
+// Use env var in production; the hardcoded value matches the seed script for local dev.
 const WORKER_API_KEY = process.env.WORKER_API_KEY || '11111111-1111-1111-1111-111111111111.test-worker-key-123';
 const QUEUE_ID = process.env.QUEUE_ID || '22222222-2222-2222-2222-222222222222'; // Default seeded high-priority queue
-
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5', 10);
 let isShuttingDown = false;
 let activeJobs = 0;
@@ -82,6 +81,7 @@ async function executeJob(job: any) {
 }
 
 async function main() {
+  console.log(`[Startup] Fully resolved API_URL: ${API_URL}`);
   console.log('Starting HTTP polling worker with concurrency', CONCURRENCY);
   console.log('Target Queue:', QUEUE_ID);
 

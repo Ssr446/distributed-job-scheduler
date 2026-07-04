@@ -3,29 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Loader2, AlertOctagon, RotateCcw, ChevronDown, ChevronUp, Code2, Brain, ArrowLeft, RefreshCw, Inbox } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { useProjectStore } from '../store/projectStore';
 
 export default function DeadLetterQueue() {
   const navigate = useNavigate();
   const [dlqEntries, setDlqEntries] = useState<any[]>([]);
+  const { activeProjectId } = useProjectStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [requeueing, setRequeueing] = useState<string | null>(null);
 
   const loadDlq = async () => {
+    if (!activeProjectId) return;
     try {
+      setLoading(true);
       setError(null);
-      const orgRes = await api.get('/orgs');
-      const orgs = orgRes.data?.data;
-      if (!orgs || orgs.length === 0) { setDlqEntries([]); return; }
-      const org = orgs[0];
-
-      const projRes = await api.get(`/orgs/${org.id}/projects`);
-      const projects = projRes.data?.data;
-      if (!projects || projects.length === 0) { setDlqEntries([]); return; }
-      const project = projects[0];
-
-      const dlqRes = await api.get(`/projects/${project.id}/dlq?limit=50`);
+      const dlqRes = await api.get(`/projects/${activeProjectId}/dlq?limit=50`);
       const raw = dlqRes.data?.data;
       // handle both { items: [] } and []
       const items: any[] = Array.isArray(raw) ? raw : (raw?.items ?? []);

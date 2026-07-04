@@ -4,24 +4,17 @@ import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, BarChart3, LineChart, PieChart as PieChartIcon } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { format } from 'date-fns';
+import { useProjectStore } from '../store/projectStore';
 
 export default function Metrics() {
   const [stats, setStats] = useState<any>(null);
+  const { activeProjectId } = useProjectStore();
   const [loading, setLoading] = useState(true);
-  const [projectId, setProjectId] = useState<string>('');
 
   const loadMetrics = async () => {
+    if (!activeProjectId) return;
     try {
-      const orgRes = await api.get('/orgs');
-      const org = orgRes.data.data[0];
-      if (!org) return;
-
-      const project = projRes.data.data[0];
-      if (!project) return;
-      
-      setProjectId(project.id);
-
-      const metricsRes = await api.get(`/projects/${project.id}/metrics`);
+      const metricsRes = await api.get(`/projects/${activeProjectId}/metrics`);
       
       const formattedMetrics = {
         ...metricsRes.data.data,
@@ -39,17 +32,21 @@ export default function Metrics() {
   };
 
   useEffect(() => {
-    loadMetrics();
-    const interval = setInterval(loadMetrics, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (activeProjectId) {
+      loadMetrics();
+      const interval = setInterval(loadMetrics, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setLoading(true);
+    }
+  }, [activeProjectId]);
 
   useEffect(() => {
-    if (projectId) {
-      joinProject(projectId);
-      return () => leaveProject(projectId);
+    if (activeProjectId) {
+      joinProject(activeProjectId);
+      return () => leaveProject(activeProjectId);
     }
-  }, [projectId]);
+  }, [activeProjectId]);
 
   if (loading || !stats) return <div className="flex justify-center mt-20"><Loader2 className="animate-spin text-blue-500 w-8 h-8" /></div>;
 

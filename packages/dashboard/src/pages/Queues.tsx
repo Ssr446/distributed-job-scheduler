@@ -131,25 +131,19 @@ function CreateQueueModal({ projectId, onClose, onCreated }: CreateQueueModalPro
   );
 }
 
+import { useProjectStore } from '../store/projectStore';
+
 export default function Queues() {
   const [queues, setQueues] = useState<any[]>([]);
-  const [projectId, setProjectId] = useState<string>('');
+  const { activeProjectId } = useProjectStore();
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const navigate = useNavigate();
 
   const loadQueues = async () => {
+    if (!activeProjectId) return;
     try {
-      const orgRes = await api.get('/orgs');
-      const org = orgRes.data?.data?.[0];
-      if (!org) return;
-
-      const projRes = await api.get(`/orgs/${org.id}/projects`);
-      const project = projRes.data?.data?.[0];
-      if (!project) return;
-      setProjectId(project.id);
-
-      const queuesRes = await api.get(`/projects/${project.id}/queues`);
+      const queuesRes = await api.get(`/projects/${activeProjectId}/queues`);
       setQueues(queuesRes.data?.data || []);
     } catch (e) {
       console.error(e);
@@ -159,17 +153,21 @@ export default function Queues() {
   };
 
   useEffect(() => {
-    loadQueues();
-    const interval = setInterval(loadQueues, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    if (activeProjectId) {
+      loadQueues();
+      const interval = setInterval(loadQueues, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setLoading(true);
+    }
+  }, [activeProjectId]);
 
   useEffect(() => {
-    if (projectId) {
-      joinProject(projectId);
-      return () => leaveProject(projectId);
+    if (activeProjectId) {
+      joinProject(activeProjectId);
+      return () => leaveProject(activeProjectId);
     }
-  }, [projectId]);
+  }, [activeProjectId]);
 
   const triggerJob = async (e: React.MouseEvent, queueId: string) => {
     e.stopPropagation();
@@ -304,9 +302,9 @@ export default function Queues() {
         )}
       </div>
 
-      {showCreate && projectId && (
+      {showCreate && activeProjectId && (
         <CreateQueueModal
-          projectId={projectId}
+          projectId={activeProjectId}
           onClose={() => setShowCreate(false)}
           onCreated={loadQueues}
         />
