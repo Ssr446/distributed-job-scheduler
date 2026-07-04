@@ -107,7 +107,7 @@ export default function JobExplorer() {
 
       {/* Filters Bar */}
       <div className="theme-panel p-4 rounded-2xl flex flex-wrap gap-4 items-end">
-        <div className="flex-1 min-w-[200px]">
+        <div className="w-full md:flex-1 min-w-[150px]">
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Queue</label>
           <select 
             value={selectedQueue} 
@@ -120,7 +120,7 @@ export default function JobExplorer() {
           </select>
         </div>
         
-        <div className="w-48">
+        <div className="flex-1 min-w-[120px] md:min-w-[150px]">
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Status</label>
           <select 
             value={selectedStatus} 
@@ -136,7 +136,7 @@ export default function JobExplorer() {
           </select>
         </div>
 
-        <div className="flex-1 min-w-[200px] relative">
+        <div className="w-full md:flex-1 min-w-[200px] relative">
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Job Type</label>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
@@ -195,7 +195,7 @@ export default function JobExplorer() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       {(job.status === 'FAILED' || job.status === 'DEAD') && (
                         <button 
                           onClick={() => handleRetry(job.id)}

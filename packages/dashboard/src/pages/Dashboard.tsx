@@ -78,10 +78,6 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>System Overview</h1>
           <p className="mt-1" style={{ color: 'var(--text-muted)' }}>Real-time metrics for your distributed clusters</p>
         </div>
-        <button onClick={() => alert('Worker deployment simulated!')} className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all font-medium cursor-pointer badge-accent hover:shadow-[0_0_15px_var(--accent-glow)]">
-          <Zap className="w-4 h-4" />
-          Deploy Worker
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

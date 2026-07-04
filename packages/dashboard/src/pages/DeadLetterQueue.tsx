@@ -107,8 +107,10 @@ export default function DeadLetterQueue() {
       {/* Table */}
       {!loading && !error && dlqEntries.length > 0 && (
         <div className="theme-panel rounded-2xl overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-12 gap-2 px-5 py-3 border-b text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: 'var(--border-base)', background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
+          <div className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              {/* Table Header */}
+              <div className="grid grid-cols-12 gap-2 px-5 py-3 border-b text-[11px] font-semibold uppercase tracking-wider" style={{ borderColor: 'var(--border-base)', background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
             <div className="col-span-1" />
             <div className="col-span-3">Job / Type</div>
             <div className="col-span-4">Failure Reason</div>
@@ -197,6 +199,7 @@ export default function DeadLetterQueue() {
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
       )}

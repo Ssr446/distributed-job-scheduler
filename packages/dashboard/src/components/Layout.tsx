@@ -248,14 +248,14 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="flex h-80">
+        <div className="flex flex-col md:flex-row md:h-80 h-[80vh] md:h-auto overflow-hidden">
           {/* Sidebar tabs */}
-          <div className="w-44 border-r p-3 space-y-1" style={{ borderColor: 'var(--border-base)' }}>
+          <div className="flex md:flex-col md:w-44 border-b md:border-b-0 md:border-r p-3 gap-2 overflow-x-auto shrink-0" style={{ borderColor: 'var(--border-base)' }}>
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === tab.id ? 'nav-active' : 'nav-item'}`}
+                className={`flex-shrink-0 w-auto md:w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition-all cursor-pointer ${activeTab === tab.id ? 'nav-active' : 'nav-item'}`}
               >
                 {tab.icon}
                 {tab.label}
@@ -264,7 +264,7 @@ function SettingsPanel({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* Content */}
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-6 overflow-y-auto min-h-[300px]">
             {activeTab === 'profile' && (
               <div className="space-y-4 animate-fade-in">
                 <div className="flex items-center gap-4 mb-6">
