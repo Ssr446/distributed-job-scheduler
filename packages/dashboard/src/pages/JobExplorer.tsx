@@ -152,14 +152,14 @@ export default function JobExplorer() {
         <div className="w-full md:flex-1 min-w-[200px] relative">
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Job Type</label>
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-faint)' }} />
             <input 
               type="text" 
               placeholder="e.g. charge_card"
               value={searchType}
               onChange={e => setSearchType(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && loadData()}
-              className="w-full theme-input pl-9"
+              className="w-full theme-input !pl-10"
             />
           </div>
         </div>
