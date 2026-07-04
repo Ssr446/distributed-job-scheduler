@@ -202,6 +202,7 @@ export default function DeadLetterQueue() {
             </div>
           </div>
         </div>
+        </div>
       )}
     </div>
   );
