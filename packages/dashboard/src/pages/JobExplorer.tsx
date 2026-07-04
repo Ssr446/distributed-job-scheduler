@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../services/api';
-import { joinProject, leaveProject } from '../services/socket';
+import { joinProject, leaveProject, getSocket } from '../services/socket';
 import { Loader2, Search, Filter, RefreshCw, X, Play, RotateCcw, FileText } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { useProjectStore } from '../store/projectStore';
@@ -10,6 +11,7 @@ export default function JobExplorer() {
   const { activeProjectId } = useProjectStore();
   const [loading, setLoading] = useState(true);
   const [queues, setQueues] = useState<any[]>([]);
+  const [lastUpdate, setLastUpdate] = useState(0);
   
   // Filters
   const [selectedQueue, setSelectedQueue] = useState<string>('');
@@ -50,12 +52,23 @@ export default function JobExplorer() {
     if (activeProjectId) {
       loadData();
     }
-  }, [activeProjectId, selectedQueue, selectedStatus]);
+  }, [activeProjectId, selectedQueue, selectedStatus, lastUpdate]);
 
   useEffect(() => {
     if (activeProjectId) {
       joinProject(activeProjectId);
-      return () => leaveProject(activeProjectId);
+      const s = getSocket();
+      
+      const handleJobUpdate = () => {
+        setLastUpdate(Date.now());
+      };
+
+      s.on('jobUpdate', handleJobUpdate);
+
+      return () => {
+        s.off('jobUpdate', handleJobUpdate);
+        leaveProject(activeProjectId);
+      };
     }
   }, [activeProjectId]);
 
@@ -230,13 +243,13 @@ export default function JobExplorer() {
         </div>
       </div>
 
-      {logsModalJob && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+      {logsModalJob && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-fade-in" style={{ position: 'fixed' }}>
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setLogsModalJob(null)} />
           <div className="relative theme-modal rounded-2xl w-full max-w-2xl animate-slide-up overflow-hidden flex flex-col h-[70vh]">
             <div className="flex items-center justify-between p-6 border-b border-[var(--border-base)] shrink-0">
               <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Job Logs</h2>
-              <button onClick={() => setLogsModalJob(null)} className="p-2 btn-ghost border-none hover:bg-transparent">
+              <button onClick={() => setLogsModalJob(null)} className="p-2 btn-ghost border-none hover:bg-transparent cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -252,7 +265,8 @@ export default function JobExplorer() {
               ))}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
