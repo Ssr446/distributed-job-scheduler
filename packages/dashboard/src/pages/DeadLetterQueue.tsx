@@ -188,7 +188,7 @@ export default function DeadLetterQueue() {
                         </div>
                         <div className="rounded-xl p-4 max-h-40 overflow-y-auto" style={{ background: 'var(--accent-soft)', border: '1px solid var(--border-active)' }}>
                           <p className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
-                            {entry?.failureSummary || 'No AI summary generated for this failure yet. Run the analysis job to generate insights.'}
+                            {entry?.failureSummary || 'Uncategorized failure — see error stack above.'}
                           </p>
                         </div>
                       </div>

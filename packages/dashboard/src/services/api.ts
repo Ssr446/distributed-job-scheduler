@@ -1,12 +1,10 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-// In production (Render), VITE_API_URL is left empty at build time so the
-// dashboard hits its own origin via Nginx's reverse-proxy (/api → API service).
-// In local dev, Vite's dev-server proxy handles /api → localhost:3000.
-// Either way, a relative base path works for both environments without any
-// runtime config change.
-const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+// In production (Render/Vercel), we rely on same-origin routing/proxying
+// so cookies are treated as 1st-party.
+// In local dev, Vite's dev-server proxy handles /api -> localhost:3000.
+const BASE_URL = '/api/v1';
 
 export const api = axios.create({
   baseURL: BASE_URL,

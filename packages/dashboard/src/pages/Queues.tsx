@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { joinProject, leaveProject } from '../services/socket';
 import { Loader2, Plus, Play, Pause, Activity, X, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 interface CreateQueueModalProps {
   projectId: string;
@@ -176,9 +177,10 @@ export default function Queues() {
         type: 'manual_trigger',
         payload: { triggeredFrom: 'dashboard', ts: new Date().toISOString() }
       });
+      toast.success('Test job enqueued successfully');
       loadQueues();
     } catch (e) {
-      alert('Failed to enqueue job');
+      toast.error('Failed to enqueue test job');
     }
   };
 

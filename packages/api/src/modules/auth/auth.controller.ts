@@ -12,7 +12,7 @@ const setTokenCookies = (res: Response, accessToken: string, refreshToken: strin
   const cookieOptions = {
     httpOnly: true,
     secure: isProd,
-    sameSite: isProd ? 'none' as const : 'lax' as const,
+    sameSite: 'lax' as const,
   };
 
   res.cookie('accessToken', accessToken, { ...cookieOptions, maxAge: 15 * 60 * 1000 }); // 15 mins
@@ -86,7 +86,7 @@ export async function logout(req: Request, res: Response, next: NextFunction): P
     const result = await authService.logout(accessToken, refreshToken);
     
     const isProd = env.NODE_ENV === 'production';
-    const cookieOptions = { httpOnly: true, secure: isProd, sameSite: isProd ? 'none' as const : 'lax' as const };
+    const cookieOptions = { httpOnly: true, secure: isProd, sameSite: 'lax' as const };
     res.clearCookie('accessToken', cookieOptions);
     res.clearCookie('refreshToken', cookieOptions);
     

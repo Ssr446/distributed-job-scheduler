@@ -20,6 +20,11 @@ const handlers: Record<string, (payload: any) => Promise<any>> = {
     console.log('[Handler] Generating invoice', payload.invoiceId);
     await new Promise(r => setTimeout(r, 500));
     return { success: true, pdfUrl: 'https://acme.com/invoice/' + payload.invoiceId + '.pdf' };
+  },
+  'manual_trigger': async (payload) => {
+    console.log('[Handler] Running manual trigger test job');
+    await new Promise(r => setTimeout(r, 250));
+    return { success: true, message: 'Manual test trigger executed successfully.' };
   }
 };
 
