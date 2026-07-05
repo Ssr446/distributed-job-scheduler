@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { joinProject, leaveProject } from '../services/socket';
-import { Loader2, Plus, Play, Pause, Activity, X, RefreshCw } from 'lucide-react';
+import { Loader2, Plus, Play, Pause, Activity, X, RefreshCw, FlaskConical, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -170,6 +170,21 @@ export default function Queues() {
     }
   }, [activeProjectId]);
 
+  const triggerDemoJob = async (e: React.MouseEvent, queueId: string, type: string, label: string) => {
+    e.stopPropagation();
+    try {
+      await api.post(`/queues/${queueId}/jobs`, {
+        type,
+        payload: { triggeredFrom: 'dashboard-demo', ts: new Date().toISOString() },
+        maxRetries: 2,
+      });
+      toast.success(`Demo job "${label}" enqueued — will fail and land in DLQ after 2 retries`);
+      loadQueues();
+    } catch {
+      toast.error(`Failed to enqueue demo job`);
+    }
+  };
+
   const triggerJob = async (e: React.MouseEvent, queueId: string) => {
     e.stopPropagation();
     try {
@@ -269,22 +284,52 @@ export default function Queues() {
             </div>
 
             {/* Card footer actions */}
-            <div className="p-3 border-t flex gap-2" style={{ borderColor: 'var(--border-base)', background: 'var(--bg-hover)' }} onClick={e => e.stopPropagation()}>
-              <button
-                onClick={e => togglePause(e, q.id, q.isPaused)}
-                className={`flex-1 flex justify-center items-center gap-1.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${q.isPaused ? 'badge-active' : 'btn-ghost border-none hover:bg-transparent hover:text-[var(--stat-paused)]'}`}
-              >
-                {q.isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-                {q.isPaused ? 'Resume' : 'Pause'}
-              </button>
-              <button
-                onClick={e => triggerJob(e, q.id)}
-                title="Enqueue test job"
-                className="flex justify-center items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer btn-ghost border-none hover:bg-[var(--accent-soft)] hover:text-[var(--accent-primary)]"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Test Job
-              </button>
+            <div className="border-t" style={{ borderColor: 'var(--border-base)' }} onClick={e => e.stopPropagation()}>
+              {/* Primary actions row */}
+              <div className="p-3 flex gap-2" style={{ background: 'var(--bg-hover)' }}>
+                <button
+                  onClick={e => togglePause(e, q.id, q.isPaused)}
+                  className={`flex-1 flex justify-center items-center gap-1.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${q.isPaused ? 'badge-active' : 'btn-ghost border-none hover:bg-transparent hover:text-[var(--stat-paused)]'}`}
+                >
+                  {q.isPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                  {q.isPaused ? 'Resume' : 'Pause'}
+                </button>
+                <button
+                  onClick={e => triggerJob(e, q.id)}
+                  title="Enqueue test job"
+                  className="flex justify-center items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer btn-ghost border-none hover:bg-[var(--accent-soft)] hover:text-[var(--accent-primary)]"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Test Job
+                </button>
+              </div>
+
+              {/* Demo Failure Scenarios section */}
+              <div className="px-3 pb-3">
+                <div className="rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-base)' }}>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5" style={{ background: 'var(--bg-panel)' }}>
+                    <FlaskConical className="w-3 h-3" style={{ color: 'var(--text-faint)' }} />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-faint)' }}>Demo Failure Scenarios</span>
+                  </div>
+                  <div className="flex gap-1 p-1.5" style={{ background: 'var(--bg-hover)' }}>
+                    {[
+                      { type: 'demo_timeout',          label: 'Timeout',    title: 'Simulates a request timeout — lands in DLQ as Network/Timeout Error' },
+                      { type: 'demo_network_error',    label: 'Network',    title: 'Simulates ECONNREFUSED — lands in DLQ as Network/Timeout Error' },
+                      { type: 'demo_validation_error', label: 'Validation', title: 'Simulates invalid payload — lands in DLQ as Validation Error' },
+                    ].map(({ type, label, title }) => (
+                      <button
+                        key={type}
+                        onClick={e => triggerDemoJob(e, q.id, type, label)}
+                        title={title}
+                        className="flex-1 py-1.5 rounded-lg text-[10px] font-semibold transition-all cursor-pointer btn-ghost border-none hover:badge-error"
+                        style={{ color: 'var(--error-text)' }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         ))}

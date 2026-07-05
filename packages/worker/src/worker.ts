@@ -25,7 +25,33 @@ const handlers: Record<string, (payload: any) => Promise<any>> = {
     console.log('[Handler] Running manual trigger test job');
     await new Promise(r => setTimeout(r, 250));
     return { success: true, message: 'Manual test trigger executed successfully.' };
-  }
+  },
+
+  // ── Demo Failure Scenarios ────────────────────────────────────────────────
+  // These handlers always fail so jobs exhaust their retries and land in the DLQ,
+  // demonstrating the DLQ failure-categorization feature. Errors are worded to
+  // match the exact keywords the categorizer in dlq.service.ts checks for.
+
+  'demo_timeout': async (_payload) => {
+    console.log('[Handler] demo_timeout: simulating a timeout failure');
+    await new Promise(r => setTimeout(r, 300));
+    // Matches categorizer keyword: "timeout" → "Network/Timeout Error"
+    throw new Error('Request timed out after 5000ms waiting for upstream service');
+  },
+
+  'demo_network_error': async (_payload) => {
+    console.log('[Handler] demo_network_error: simulating a network failure');
+    await new Promise(r => setTimeout(r, 300));
+    // Matches categorizer keyword: "econnrefused" → "Network/Timeout Error"
+    throw new Error('ECONNREFUSED: connect ECONNREFUSED 10.0.0.1:5432 — database unreachable');
+  },
+
+  'demo_validation_error': async (_payload) => {
+    console.log('[Handler] demo_validation_error: simulating a validation failure');
+    await new Promise(r => setTimeout(r, 300));
+    // Matches categorizer keyword: "validation" → "Validation Error"
+    throw new Error('Validation failed: missing required field "amount" in job payload');
+  },
 };
 
 async function fetchApi(path: string, options: RequestInit = {}) {
