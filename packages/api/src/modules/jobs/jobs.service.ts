@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/database.js';
 import { AppError } from '../../utils/AppError.js';
 import { eventBus } from '../../events/eventBus.js';
+import { categorizeFailure } from '../dlq/dlq.service.js';
 
 export interface CreateJobInput {
   type: string;
@@ -310,7 +311,14 @@ export const failJob = async (id: string, workerId: string, error: string, durat
         data: { status: 'DEAD', error }
       });
       await tx.deadLetterQueue.create({
-        data: { jobId: id, queueId: job.queueId, reason: 'Max retries exhausted', retryCount: attempt, lastError: error }
+        data: { 
+          jobId: id, 
+          queueId: job.queueId, 
+          reason: 'Max retries exhausted', 
+          retryCount: attempt, 
+          lastError: error,
+          failureSummary: categorizeFailure(error || '')
+        }
       });
       eventBus.emit('job.dead', { ...updated, projectId: job.queue.projectId });
       return updated;

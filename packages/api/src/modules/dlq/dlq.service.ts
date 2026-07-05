@@ -1,6 +1,22 @@
 import { prisma } from '../../config/database.js';
 import { AppError } from '../../utils/AppError.js';
 
+export const categorizeFailure = (errorText: string): string => {
+  const text = (errorText || '').toLowerCase();
+  
+  if (text.includes('timeout'.toLowerCase()) || text.includes('econnrefused'.toLowerCase())) {
+    return 'Network/Timeout Error: The external service was unreachable or timed out.';
+  } else if (text.includes('validation'.toLowerCase()) || text.includes('invalid'.toLowerCase()) || text.includes('bad request'.toLowerCase())) {
+    return 'Validation Error: Job payload contains invalid data.';
+  } else if (text.includes('declined'.toLowerCase()) || text.includes('insufficient funds'.toLowerCase())) {
+    return 'Business Logic Error: The transaction was declined or failed business rules.';
+  } else if (text.includes('null'.toLowerCase()) || text.includes('undefined'.toLowerCase())) {
+    return 'Null Reference Error: Code attempted to access a missing property.';
+  }
+  
+  return 'Unknown Error: Review logs for details.';
+};
+
 export const listDlq = async (projectId: string, query: any) => {
   const page = parseInt(query.page) || 1;
   const limit = parseInt(query.limit) || 20;
@@ -13,6 +29,16 @@ export const listDlq = async (projectId: string, query: any) => {
     prisma.deadLetterQueue.count({ where })
   ]);
   
+  // Backfill any uncategorized entries on the fly (since UI doesn't call getDlq)
+  for (const entry of data) {
+    if (!entry.failureSummary) {
+      const summary = categorizeFailure(entry.lastError || '');
+      entry.failureSummary = summary;
+      // Fire-and-forget update to persist the backfill
+      prisma.deadLetterQueue.update({ where: { id: entry.id }, data: { failureSummary: summary } }).catch(console.error);
+    }
+  }
+  
   return { data, meta: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 };
 
@@ -21,19 +47,7 @@ export const getDlq = async (id: string) => {
   if (!entry) throw new AppError(404, 'NOT_FOUND', 'DLQ entry not found');
   
   if (!entry.failureSummary) {
-    let summary = 'Unknown Error: Review logs for details.';
-    const errorText = (entry.lastError || '').toLowerCase();
-    
-    if (errorText.includes('timeout') || errorText.includes('econnrefused')) {
-      summary = 'Network/Timeout Error: The external service was unreachable or timed out.';
-    } else if (errorText.includes('validation') || errorText.includes('invalid') || errorText.includes('bad request')) {
-      summary = 'Validation Error: Job payload contains invalid data.';
-    } else if (errorText.includes('declined') || errorText.includes('insufficient funds')) {
-      summary = 'Business Logic Error: The transaction was declined or failed business rules.';
-    } else if (errorText.includes('null') || errorText.includes('undefined')) {
-      summary = 'Null Reference Error: Code attempted to access a missing property.';
-    }
-    
+    const summary = categorizeFailure(entry.lastError || '');
     await prisma.deadLetterQueue.update({ where: { id }, data: { failureSummary: summary } });
     entry.failureSummary = summary;
   }
