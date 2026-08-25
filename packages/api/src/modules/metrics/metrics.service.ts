@@ -18,7 +18,6 @@ export const getProjectMetrics = async (projectId: string) => {
     JOIN queues q ON q.id = j."queueId"
     WHERE q."projectId" = ${projectId}
       AND je.status = 'COMPLETED'
-      AND je."completedAt" >= NOW() - INTERVAL '24 hours'
   `;
   const avgDurationMs = durationResult[0]?.avg_ms ?? null;
 
@@ -120,7 +119,6 @@ export const getQueueMetrics = async (queueId: string) => {
       SELECT id FROM jobs WHERE "queueId" = ${queueId}
     )
     AND je.status = 'COMPLETED'
-    AND je."completedAt" >= NOW() - INTERVAL '1 hour'
   `;
   const avgDurationMs = latency[0]?.avg_ms ?? null;
 
