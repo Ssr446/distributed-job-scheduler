@@ -8,7 +8,15 @@ import { useProjectStore } from '../store/projectStore';
 
 export default function Dashboard() {
   const { activeProjectId } = useProjectStore();
-  const [stats, setStats] = useState({ totalJobs: 0, completedJobs: 0, failedJobs: 0, activeWorkers: 0, throughputLastHour: [] });
+  const [stats, setStats] = useState<{
+    totalJobs: number;
+    completedJobs: number;
+    failedJobs: number;
+    activeWorkers: number;
+    avgDurationMs: number | null;
+    throughputLastHour: any[];
+    queueHealth: any[];
+  }>({ totalJobs: 0, completedJobs: 0, failedJobs: 0, activeWorkers: 0, avgDurationMs: null, throughputLastHour: [], queueHealth: [] });
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -80,12 +88,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard icon={<Activity style={{ color: 'var(--stat-running)' }} />} title="Total Jobs" value={stats.totalJobs.toLocaleString()} trend="+Live" bg="rgba(37, 99, 235, 0.1)" border="rgba(37, 99, 235, 0.2)" />
         <StatCard icon={<CheckCircle2 style={{ color: 'var(--stat-completed)' }} />} title="Completed" value={stats.completedJobs.toLocaleString()} trend="Success" bg="var(--success-bg)" border="var(--success-border)" />
         <StatCard icon={<XCircle style={{ color: 'var(--stat-failed)' }} />} title="Failed" value={stats.failedJobs.toLocaleString()} trend="Attention" bg="var(--error-bg)" border="var(--error-border)" />
+        <StatCard icon={<Clock style={{ color: 'var(--accent-primary)' }} />} title="Avg Duration" value={stats.avgDurationMs != null ? `${stats.avgDurationMs}ms` : '—'} trend="24h" bg="var(--accent-soft)" border="var(--border-active)" />
         <StatCard icon={<Server style={{ color: 'var(--accent-primary)' }} />} title="Active Workers" value={stats.activeWorkers} trend="Polling" bg="var(--accent-soft)" border="var(--border-active)" />
       </div>
+
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 p-6 theme-panel rounded-2xl">
@@ -133,6 +143,31 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Queue Health */}
+      {stats.queueHealth && stats.queueHealth.length > 0 && (
+        <div className="theme-panel p-6 rounded-2xl">
+          <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>Queue Health</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {stats.queueHealth.map((q: any) => (
+              <div key={q.id} className="theme-card p-4 rounded-xl">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{q.name}</span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${q.isPaused ? 'badge-paused' : 'badge-active'}`}>
+                    {q.isPaused ? 'PAUSED' : 'ACTIVE'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div><p className="text-lg font-bold" style={{ color: 'var(--stat-running)' }}>{q.queued}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Queued</p></div>
+                  <div><p className="text-lg font-bold" style={{ color: '#3b82f6' }}>{q.running}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Running</p></div>
+                  <div><p className="text-lg font-bold" style={{ color: 'var(--stat-completed)' }}>{q.completed}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Done</p></div>
+                  <div><p className="text-lg font-bold" style={{ color: 'var(--stat-failed)' }}>{q.failed + q.dead}</p><p className="text-xs" style={{ color: 'var(--text-muted)' }}>Failed</p></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
