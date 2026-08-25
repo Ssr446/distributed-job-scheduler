@@ -6,6 +6,7 @@ import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
 import { setupWebSocket } from './websocket/socketHandler.js';
+import { startCronScheduler } from './scheduler/cronScheduler.js';
 
 const PORT = env.PORT;
 const server = http.createServer(app);
@@ -26,6 +27,7 @@ setupWebSocket(io);
 async function start() {
   try {
     await connectDatabase();
+    startCronScheduler();
     server.listen(PORT, () => {
       logger.info(`🚀 Server listening on port ${PORT} [${env.NODE_ENV}]`);
     });

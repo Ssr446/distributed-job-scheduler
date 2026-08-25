@@ -1,12 +1,17 @@
 import 'dotenv/config';
+import os from 'os';
 
 const API_URL = process.env.API_URL || `http://127.0.0.1:${process.env.PORT || 3000}/api/v1`;
 // Use env var in production; the hardcoded value matches the seed script for local dev.
 const WORKER_API_KEY = process.env.WORKER_API_KEY || '11111111-1111-1111-1111-111111111111.test-worker-key-123';
 const QUEUE_ID = process.env.QUEUE_ID || '22222222-2222-2222-2222-222222222222'; // Default seeded high-priority queue
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '5', 10);
+const HEARTBEAT_INTERVAL_MS = parseInt(process.env.WORKER_HEARTBEAT_INTERVAL_MS || '15000', 10);
+
 let isShuttingDown = false;
 let activeJobs = 0;
+let workerId: string | null = null;
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
 // Pluggable job handler registry
 const handlers: Record<string, (payload: any) => Promise<any>> = {
@@ -70,6 +75,40 @@ async function fetchApi(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+async function registerWorker(): Promise<string> {
+  const response = await fetchApi('/workers/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `worker-${process.pid}`,
+      hostname: os.hostname(),
+      pid: process.pid,
+      concurrency: CONCURRENCY,
+      queues: [QUEUE_ID],
+    })
+  });
+  const id = response.data?.id;
+  console.log(`[Worker] Registered with ID: ${id}`);
+  return id;
+}
+
+function startHeartbeat(id: string) {
+  heartbeatTimer = setInterval(async () => {
+    try {
+      const mem = process.memoryUsage();
+      await fetchApi(`/workers/${id}/heartbeat`, {
+        method: 'POST',
+        body: JSON.stringify({
+          activeJobs,
+          memoryUsage: Math.round(mem.rss / 1024 / 1024), // MB
+        })
+      });
+    } catch (err: any) {
+      console.warn('[Worker] Heartbeat failed:', err.message);
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  console.log(`[Worker] Heartbeating every ${HEARTBEAT_INTERVAL_MS}ms`);
+}
+
 async function executeJob(job: any) {
   activeJobs++;
   const startMs = Date.now();
@@ -116,20 +155,47 @@ async function main() {
   console.log('Starting HTTP polling worker with concurrency', CONCURRENCY);
   console.log('Target Queue:', QUEUE_ID);
 
+  // ── Register with the API ────────────────────────────────────────────────
+  try {
+    workerId = await registerWorker();
+    startHeartbeat(workerId);
+  } catch (err: any) {
+    console.warn('[Worker] Could not register with API (will retry on next start):', err.message);
+    // Non-fatal: worker can still poll and execute jobs without a registered ID
+  }
+
+  // ── Graceful Shutdown ────────────────────────────────────────────────────
   const shutdown = async () => {
     console.log('Shutting down worker. Waiting for in-flight jobs to finish...');
     isShuttingDown = true;
+
+    // Stop heartbeat
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+
+    // Wait up to 10s for active jobs to complete
     let waitMs = 0;
     while (activeJobs > 0 && waitMs < 10000) {
       await new Promise(r => setTimeout(r, 500));
       waitMs += 500;
     }
+
+    // Deregister from the API
+    if (workerId) {
+      try {
+        await fetchApi(`/workers/${workerId}/deregister`, { method: 'POST' });
+        console.log('[Worker] Deregistered successfully.');
+      } catch (err: any) {
+        console.warn('[Worker] Deregister failed:', err.message);
+      }
+    }
+
     console.log('Worker shutdown complete.');
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
+  // ── Polling Loop ─────────────────────────────────────────────────────────
   while (!isShuttingDown) {
     if (activeJobs >= CONCURRENCY) {
       await new Promise(r => setTimeout(r, 200));
@@ -161,3 +227,5 @@ main().catch(err => {
   console.error('[Worker] Fatal error', err);
   process.exit(1);
 });
+
+

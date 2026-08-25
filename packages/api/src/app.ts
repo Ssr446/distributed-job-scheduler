@@ -13,7 +13,7 @@ import queueRoutes from './modules/queues/queues.routes.js';
 
 import { jobRoutes, queueJobRoutes, workerJobRoutes, workerQueueRoutes } from './modules/jobs/jobs.routes.js';
 import { dlqRoutes, projectDlqRoutes } from './modules/dlq/dlq.routes.js';
-import { workerRoutes } from './modules/workers/workers.routes.js';
+import { workerRoutes, workerSelfRoutes } from './modules/workers/workers.routes.js';
 import { projectMetricsRoutes, queueMetricsRoutes } from './modules/metrics/metrics.routes.js';
 
 import { errorHandler } from './middleware/errorHandler.js';
@@ -92,6 +92,7 @@ v1Router.use('/auth', authRoutes);
 // Worker routes (mounted outside `authenticate` to rely purely on `apiKeyAuth`)
 v1Router.use('/jobs', workerJobRoutes);
 v1Router.use('/queues', workerQueueRoutes);
+v1Router.use('/workers', workerSelfRoutes);
 
 // Protected Dashboard routes
 v1Router.use('/orgs', authenticate, requireCsrfSafe, orgRoutes);
